@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020, Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -26,15 +26,16 @@
 #include <string.h> /* memset */
 #include <time.h>   /* clock */
 
+#ifndef ZDICT_STATIC_LINKING_ONLY
+#  define ZDICT_STATIC_LINKING_ONLY
+#endif
+
 #include "../common/mem.h" /* read */
 #include "../common/pool.h"
 #include "../common/threading.h"
-#include "cover.h"
 #include "../common/zstd_internal.h" /* includes zstd.h */
-#ifndef ZDICT_STATIC_LINKING_ONLY
-#define ZDICT_STATIC_LINKING_ONLY
-#endif
-#include "zdict.h"
+#include "../zdict.h"
+#include "cover.h"
 
 /*-*************************************
 *  Constants
@@ -955,7 +956,7 @@ void COVER_dictSelectionFree(COVER_dictSelection_t selection){
   free(selection.dictContent);
 }
 
-COVER_dictSelection_t COVER_selectDict(BYTE* customDictContent,
+COVER_dictSelection_t COVER_selectDict(BYTE* customDictContent, size_t dictBufferCapacity,
         size_t dictContentSize, const BYTE* samplesBuffer, const size_t* samplesSizes, unsigned nbFinalizeSamples,
         size_t nbCheckSamples, size_t nbSamples, ZDICT_cover_params_t params, size_t* offsets, size_t totalCompressedSize) {
 
@@ -963,8 +964,8 @@ COVER_dictSelection_t COVER_selectDict(BYTE* customDictContent,
   size_t largestCompressed = 0;
   BYTE* customDictContentEnd = customDictContent + dictContentSize;
 
-  BYTE * largestDictbuffer = (BYTE *)malloc(dictContentSize);
-  BYTE * candidateDictBuffer = (BYTE *)malloc(dictContentSize);
+  BYTE * largestDictbuffer = (BYTE *)malloc(dictBufferCapacity);
+  BYTE * candidateDictBuffer = (BYTE *)malloc(dictBufferCapacity);
   double regressionTolerance = ((double)params.shrinkDictMaxRegression / 100.0) + 1.00;
 
   if (!largestDictbuffer || !candidateDictBuffer) {
@@ -976,7 +977,7 @@ COVER_dictSelection_t COVER_selectDict(BYTE* customDictContent,
   /* Initial dictionary size and compressed size */
   memcpy(largestDictbuffer, customDictContent, dictContentSize);
   dictContentSize = ZDICT_finalizeDictionary(
-    largestDictbuffer, dictContentSize, customDictContent, dictContentSize,
+    largestDictbuffer, dictBufferCapacity, customDictContent, dictContentSize,
     samplesBuffer, samplesSizes, nbFinalizeSamples, params.zParams);
 
   if (ZDICT_isError(dictContentSize)) {
@@ -1010,7 +1011,7 @@ COVER_dictSelection_t COVER_selectDict(BYTE* customDictContent,
   while (dictContentSize < largestDict) {
     memcpy(candidateDictBuffer, largestDictbuffer, largestDict);
     dictContentSize = ZDICT_finalizeDictionary(
-      candidateDictBuffer, dictContentSize, customDictContentEnd - dictContentSize, dictContentSize,
+      candidateDictBuffer, dictBufferCapacity, customDictContentEnd - dictContentSize, dictContentSize,
       samplesBuffer, samplesSizes, nbFinalizeSamples, params.zParams);
 
     if (ZDICT_isError(dictContentSize)) {
@@ -1062,18 +1063,19 @@ typedef struct COVER_tryParameters_data_s {
  * This function is thread safe if zstd is compiled with multithreaded support.
  * It takes its parameters as an *OWNING* opaque pointer to support threading.
  */
-static void COVER_tryParameters(void *opaque) {
+static void COVER_tryParameters(void *opaque)
+{
   /* Save parameters as local variables */
-  COVER_tryParameters_data_t *const data = (COVER_tryParameters_data_t *)opaque;
+  COVER_tryParameters_data_t *const data = (COVER_tryParameters_data_t*)opaque;
   const COVER_ctx_t *const ctx = data->ctx;
   const ZDICT_cover_params_t parameters = data->parameters;
   size_t dictBufferCapacity = data->dictBufferCapacity;
   size_t totalCompressedSize = ERROR(GENERIC);
   /* Allocate space for hash table, dict, and freqs */
   COVER_map_t activeDmers;
-  BYTE *const dict = (BYTE * const)malloc(dictBufferCapacity);
+  BYTE* const dict = (BYTE*)malloc(dictBufferCapacity);
   COVER_dictSelection_t selection = COVER_dictSelectionError(ERROR(GENERIC));
-  U32 *freqs = (U32 *)malloc(ctx->suffixSize * sizeof(U32));
+  U32* const freqs = (U32*)malloc(ctx->suffixSize * sizeof(U32));
   if (!COVER_map_init(&activeDmers, parameters.k - parameters.d + 1)) {
     DISPLAYLEVEL(1, "Failed to allocate dmer map: out of memory\n");
     goto _cleanup;
@@ -1088,7 +1090,7 @@ static void COVER_tryParameters(void *opaque) {
   {
     const size_t tail = COVER_buildDictionary(ctx, freqs, &activeDmers, dict,
                                               dictBufferCapacity, parameters);
-    selection = COVER_selectDict(dict + tail, dictBufferCapacity - tail,
+    selection = COVER_selectDict(dict + tail, dictBufferCapacity, dictBufferCapacity - tail,
         ctx->samples, ctx->samplesSizes, (unsigned)ctx->nbTrainSamples, ctx->nbTrainSamples, ctx->nbSamples, parameters, ctx->offsets,
         totalCompressedSize);
 
@@ -1103,15 +1105,14 @@ _cleanup:
   free(data);
   COVER_map_destroy(&activeDmers);
   COVER_dictSelectionFree(selection);
-  if (freqs) {
-    free(freqs);
-  }
+  free(freqs);
 }
 
 ZDICTLIB_API size_t ZDICT_optimizeTrainFromBuffer_cover(
-    void *dictBuffer, size_t dictBufferCapacity, const void *samplesBuffer,
-    const size_t *samplesSizes, unsigned nbSamples,
-    ZDICT_cover_params_t *parameters) {
+    void* dictBuffer, size_t dictBufferCapacity, const void* samplesBuffer,
+    const size_t* samplesSizes, unsigned nbSamples,
+    ZDICT_cover_params_t* parameters)
+{
   /* constants */
   const unsigned nbThreads = parameters->nbThreads;
   const double splitPoint =

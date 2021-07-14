@@ -1,79 +1,124 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under both the BSD-style license (found in the
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found
+ * in the COPYING file in the root directory of this source tree).
+ * You may select, at your option, one of the above-listed licenses.
+ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/string.h>
 #include <linux/zstd.h>
 
-EXPORT_SYMBOL(ZSTD_compressBound);
-EXPORT_SYMBOL(ZSTD_minCLevel);
-EXPORT_SYMBOL(ZSTD_maxCLevel);
-EXPORT_SYMBOL(ZSTD_freeCCtx);
-EXPORT_SYMBOL(ZSTD_compressCCtx);
-EXPORT_SYMBOL(ZSTD_cParam_getBounds);
-EXPORT_SYMBOL(ZSTD_CCtx_setParameter);
-EXPORT_SYMBOL(ZSTD_CCtx_setPledgedSrcSize);
-EXPORT_SYMBOL(ZSTD_CCtx_reset);
-EXPORT_SYMBOL(ZSTD_compress2);
-EXPORT_SYMBOL(ZSTD_freeCStream);
-EXPORT_SYMBOL(ZSTD_compressStream2);
-EXPORT_SYMBOL(ZSTD_CStreamInSize);
-EXPORT_SYMBOL(ZSTD_CStreamOutSize);
-EXPORT_SYMBOL(ZSTD_initCStream);
-EXPORT_SYMBOL(ZSTD_compressStream);
-EXPORT_SYMBOL(ZSTD_flushStream);
-EXPORT_SYMBOL(ZSTD_endStream);
-EXPORT_SYMBOL(ZSTD_compress_usingDict);
-EXPORT_SYMBOL(ZSTD_freeCDict);
-EXPORT_SYMBOL(ZSTD_compress_usingCDict);
-EXPORT_SYMBOL(ZSTD_CCtx_refCDict);
-EXPORT_SYMBOL(ZSTD_CCtx_refPrefix);
-EXPORT_SYMBOL(ZSTD_sizeof_CCtx);
-EXPORT_SYMBOL(ZSTD_sizeof_CStream);
-EXPORT_SYMBOL(ZSTD_sizeof_CDict);
-EXPORT_SYMBOL(ZSTD_getSequences);
-EXPORT_SYMBOL(ZSTD_estimateCCtxSize);
-EXPORT_SYMBOL(ZSTD_estimateCCtxSize_usingCParams);
-EXPORT_SYMBOL(ZSTD_estimateCCtxSize_usingCCtxParams);
-EXPORT_SYMBOL(ZSTD_estimateCStreamSize);
-EXPORT_SYMBOL(ZSTD_estimateCStreamSize_usingCParams);
-EXPORT_SYMBOL(ZSTD_estimateCDictSize);
-EXPORT_SYMBOL(ZSTD_estimateCDictSize_advanced);
-EXPORT_SYMBOL(ZSTD_initStaticCCtx);
-EXPORT_SYMBOL(ZSTD_initStaticCStream);
-EXPORT_SYMBOL(ZSTD_initStaticCDict);
-EXPORT_SYMBOL(ZSTD_createCCtx_advanced);
-EXPORT_SYMBOL(ZSTD_createCStream_advanced);
-EXPORT_SYMBOL(ZSTD_createCDict_advanced);
-EXPORT_SYMBOL(ZSTD_createCDict_byReference);
-EXPORT_SYMBOL(ZSTD_getCParams);
-EXPORT_SYMBOL(ZSTD_getParams);
-EXPORT_SYMBOL(ZSTD_checkCParams);
-EXPORT_SYMBOL(ZSTD_adjustCParams);
-EXPORT_SYMBOL(ZSTD_compress_advanced);
-EXPORT_SYMBOL(ZSTD_compress_usingCDict_advanced);
-EXPORT_SYMBOL(ZSTD_CCtx_loadDictionary_byReference);
-EXPORT_SYMBOL(ZSTD_CCtx_loadDictionary_advanced);
-EXPORT_SYMBOL(ZSTD_CCtx_refPrefix_advanced);
-EXPORT_SYMBOL(ZSTD_CCtx_getParameter);
-EXPORT_SYMBOL(ZSTD_compressStream2_simpleArgs);
-EXPORT_SYMBOL(ZSTD_initCStream_srcSize);
-EXPORT_SYMBOL(ZSTD_initCStream_usingDict);
-EXPORT_SYMBOL(ZSTD_initCStream_advanced);
-EXPORT_SYMBOL(ZSTD_initCStream_usingCDict);
-EXPORT_SYMBOL(ZSTD_initCStream_usingCDict_advanced);
-EXPORT_SYMBOL(ZSTD_resetCStream);
-EXPORT_SYMBOL(ZSTD_getFrameProgression);
-EXPORT_SYMBOL(ZSTD_toFlushNow);
-EXPORT_SYMBOL(ZSTD_compressBegin);
-EXPORT_SYMBOL(ZSTD_compressBegin_usingDict);
-EXPORT_SYMBOL(ZSTD_compressBegin_advanced);
-EXPORT_SYMBOL(ZSTD_compressBegin_usingCDict);
-EXPORT_SYMBOL(ZSTD_compressBegin_usingCDict_advanced);
-EXPORT_SYMBOL(ZSTD_copyCCtx);
-EXPORT_SYMBOL(ZSTD_compressContinue);
-EXPORT_SYMBOL(ZSTD_compressEnd);
-EXPORT_SYMBOL(ZSTD_getBlockSize);
-EXPORT_SYMBOL(ZSTD_compressBlock);
+#include "common/zstd_deps.h"
+#include "common/zstd_internal.h"
+
+int zstd_min_clevel(void)
+{
+	return ZSTD_minCLevel();
+}
+EXPORT_SYMBOL(zstd_min_clevel);
+
+int zstd_max_clevel(void)
+{
+	return ZSTD_maxCLevel();
+}
+EXPORT_SYMBOL(zstd_max_clevel);
+
+size_t zstd_compress_bound(size_t src_size)
+{
+	return ZSTD_compressBound(src_size);
+}
+EXPORT_SYMBOL(zstd_compress_bound);
+
+zstd_parameters zstd_get_params(int level,
+	unsigned long long estimated_src_size)
+{
+	return ZSTD_getParams(level, estimated_src_size, 0);
+}
+EXPORT_SYMBOL(zstd_get_params);
+
+size_t zstd_cctx_workspace_bound(const zstd_compression_parameters *cparams)
+{
+	return ZSTD_estimateCCtxSize_usingCParams(*cparams);
+}
+EXPORT_SYMBOL(zstd_cctx_workspace_bound);
+
+zstd_cctx *zstd_init_cctx(void *workspace, size_t workspace_size)
+{
+	if (workspace == NULL)
+		return NULL;
+	return ZSTD_initStaticCCtx(workspace, workspace_size);
+}
+EXPORT_SYMBOL(zstd_init_cctx);
+
+size_t zstd_compress_cctx(zstd_cctx *cctx, void *dst, size_t dst_capacity,
+	const void *src, size_t src_size, const zstd_parameters *parameters)
+{
+	return ZSTD_compress_advanced(cctx, dst, dst_capacity, src, src_size, NULL, 0, *parameters);
+}
+EXPORT_SYMBOL(zstd_compress_cctx);
+
+size_t zstd_cstream_workspace_bound(const zstd_compression_parameters *cparams)
+{
+	return ZSTD_estimateCStreamSize_usingCParams(*cparams);
+}
+EXPORT_SYMBOL(zstd_cstream_workspace_bound);
+
+zstd_cstream *zstd_init_cstream(const zstd_parameters *parameters,
+	unsigned long long pledged_src_size, void *workspace, size_t workspace_size)
+{
+	zstd_cstream *cstream;
+	size_t ret;
+
+	if (workspace == NULL)
+		return NULL;
+
+	cstream = ZSTD_initStaticCStream(workspace, workspace_size);
+	if (cstream == NULL)
+		return NULL;
+
+	/* 0 means unknown in linux zstd API but means 0 in new zstd API */
+	if (pledged_src_size == 0)
+		pledged_src_size = ZSTD_CONTENTSIZE_UNKNOWN;
+
+	ret = ZSTD_initCStream_advanced(cstream, NULL, 0, *parameters, pledged_src_size);
+	if (ZSTD_isError(ret))
+		return NULL;
+
+	return cstream;
+}
+EXPORT_SYMBOL(zstd_init_cstream);
+
+size_t zstd_reset_cstream(zstd_cstream *cstream,
+	unsigned long long pledged_src_size)
+{
+	return ZSTD_resetCStream(cstream, pledged_src_size);
+}
+EXPORT_SYMBOL(zstd_reset_cstream);
+
+size_t zstd_compress_stream(zstd_cstream *cstream, zstd_out_buffer *output,
+	zstd_in_buffer *input)
+{
+	return ZSTD_compressStream(cstream, output, input);
+}
+EXPORT_SYMBOL(zstd_compress_stream);
+
+size_t zstd_flush_stream(zstd_cstream *cstream, zstd_out_buffer *output)
+{
+	return ZSTD_flushStream(cstream, output);
+}
+EXPORT_SYMBOL(zstd_flush_stream);
+
+size_t zstd_end_stream(zstd_cstream *cstream, zstd_out_buffer *output)
+{
+	return ZSTD_endStream(cstream, output);
+}
+EXPORT_SYMBOL(zstd_end_stream);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Zstd Compressor");
